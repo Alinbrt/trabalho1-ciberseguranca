@@ -250,3 +250,277 @@ def deletar_ativo(banco: dict, id_ativo: int) -> bool:
 
     del banco[id_ativo]
     return True
+
+
+# ==============================================================================
+# 5. GESTÃO DE VULNERABILIDADES ASSOCIADAS (Requisitos 7 e 8)
+# ==============================================================================
+
+def cadastrar_vulnerabilidade(
+    banco: dict,
+    id_ativo: int,
+    descricao: str,
+    categoria: str,
+    severidade_nome: str,
+    status_nome: str
+) -> bool:
+    """
+    Cadastra uma vulnerabilidade associada a um ativo existente (Requisito 7).
+    Valida campos obrigatórios e checa valores contra as enumerações Severidade e StatusTratamento.
+    """
+    # 1. Verifica se o ativo pai existe na base
+    if id_ativo not in banco:
+        print(f"Erro: Ativo com ID {id_ativo} não encontrado. Impossível associar vulnerabilidade.")
+        return False
+
+    # 2. Validação de campos de texto não vazios (Requisito 1)
+    desc_limpa = descricao.strip()
+    cat_limpa = categoria.strip()
+    if not desc_limpa or not cat_limpa:
+        print("Erro: Descrição e categoria da vulnerabilidade não podem ficar em branco.")
+        return False
+
+    # 3. Validação da Severidade contra o Enum (Requisito 7)
+    try:
+        severidade_validada = Severidade(severidade_nome.strip())
+    except ValueError:
+        opcoes_sev = [s.value for s in Severidade]
+        print(f"Erro: Severidade '{severidade_nome}' inválida. Opções válidas: {opcoes_sev}")
+        return False
+
+    # 4. Validação do Status contra o Enum (Requisito 7)
+    try:
+        status_validado = StatusTratamento(status_nome.strip())
+    except ValueError:
+        opcoes_st = [st.value for st in StatusTratamento]
+        print(f"Erro: Status '{status_nome}' inválido. Opções válidas: {opcoes_st}")
+        return False
+
+    # 5. Estruturação do registro da vulnerabilidade
+    registro_vulnerabilidade = {
+        "descricao": desc_limpa,
+        "categoria": cat_limpa,
+        "severidade": severidade_validada.value,
+        "status": status_validado.value
+    }
+
+    # 6. Inserção na lista interna do ativo pai em tempo amortizado O(1)
+    banco[id_ativo]["vulnerabilidades"].append(registro_vulnerabilidade)
+    return True
+
+
+def listar_vulnerabilidades_ativo(banco: dict, id_ativo: int) -> bool:
+    """
+    Exibe as vulnerabilidades associadas a um ativo de forma estruturada (Requisito 8).
+    Informa explicitamente se o ativo estiver sem vulnerabilidades registradas.
+    """
+    if id_ativo not in banco:
+        print(f"Erro: Ativo com ID {id_ativo} não encontrado.")
+        return False
+
+    ativo = banco[id_ativo]
+    vulnerabilidades = ativo.get("vulnerabilidades", [])
+
+    print(f"\n=== VULNERABILIDADES DO ATIVO {id_ativo} ({ativo['hostname']}) ===")
+
+    # Atendimento estrito ao Requisito 8 quando a lista estiver vazia
+    if not vulnerabilidades:
+        print("Ativo sem vulnerabilidades registradas.")
+        return True
+
+    for indice, vuln in enumerate(vulnerabilidades, start=1):
+        print(f"\n[{indice}] Categoria:  {vuln['categoria']}")
+        print(f"    Descrição:  {vuln['descricao']}")
+        print(f"    Severidade: {vuln['severidade']}")
+        print(f"    Status:     {vuln['status']}")
+
+    return True
+
+# ==============================================================================
+# 6. INTERFACE DE USUÁRIO E MENU PRINCIPAL (Requisito 1)
+# ==============================================================================
+
+def menu_principal():
+    """
+    Controlador central da interface em linha de comando (CLI).
+    Garante o ciclo de vida da aplicação com persistência e tolerância a falhas.
+    """
+    global banco_ativos
+
+    # Carregamento seguro dos dados persistidos ao inicializar o sistema (Requisito 3)
+    banco_ativos = carregar_dados_de_arquivo()
+    print("Base de dados carregada com sucesso.")
+
+    while True:
+        print("\n" + "=" * 48)
+        print("  SISTEMA DE GESTÃO DE ATIVOS E VULNERABILIDADES")
+        print("=" * 48)
+        print("1. Cadastrar Ativo")
+        print("2. Buscar Ativo por ID")
+        print("3. Buscar Ativo por Hostname")
+        print("4. Atualizar Ativo")
+        print("5. Deletar Ativo")
+        print("6. Cadastrar Vulnerabilidade")
+        print("7. Listar Vulnerabilidades de um Ativo")
+        print("8. Salvar Base de Dados em Disco")
+        print("0. Sair do Sistema")
+        print("-" * 48)
+
+        opcao = input("Selecione uma opção: ").strip()
+
+        if opcao == "1":
+            print("\n--- CADASTRO DE NOVO ATIVO ---")
+            try:
+                id_ativo = int(input("Informe o ID numérico do ativo: ").strip())
+            except ValueError:
+                print("Erro: O identificador deve ser um número inteiro válido.")
+                continue
+
+            hostname = input("Informe o Hostname (ex: srv-db-01): ")
+            responsavel = input("Informe o Responsável (sem números): ")
+            localizacao = input("Informe a Localização física/lógica: ")
+
+            print("\nCategorias disponíveis:")
+            for tipo in TipoAtivo:
+                print(f"  [{tipo.value}] {tipo.name}")
+
+            try:
+                tipo_codigo = int(input("Código da categoria: ").strip())
+            except ValueError:
+                print("Erro: Código de categoria deve ser numérico.")
+                continue
+
+            if cadastrar_ativo(banco_ativos, id_ativo, hostname, responsavel, localizacao, tipo_codigo):
+                print(f"Ativo ID {id_ativo} cadastrado com sucesso!")
+
+        elif opcao == "2":
+            print("\n--- BUSCA DE ATIVO POR ID ---")
+            try:
+                id_ativo = int(input("Informe o ID a pesquisar: ").strip())
+            except ValueError:
+                print("Erro: O ID informado deve ser um número inteiro.")
+                continue
+
+            ativo = buscar_ativo_por_id(banco_ativos, id_ativo)
+            if ativo:
+                print(f"\n[ID {ativo['id']}] Hostname: {ativo['hostname']}")
+                print(f"  Responsável: {ativo['responsavel']}")
+                print(f"  Localização: {ativo['localizacao']}")
+                print(f"  Categoria:   {ativo['tipo']} (Código {ativo['tipo_codigo']})")
+                print(f"  Qtd. Vulnerabilidades: {len(ativo['vulnerabilidades'])}")
+            else:
+                print(f"Nenhum ativo localizado com o ID {id_ativo}.")
+
+        elif opcao == "3":
+            print("\n--- BUSCA DE ATIVOS POR HOSTNAME ---")
+            termo = input("Informe o termo de busca: ")
+            resultados = buscar_ativos_por_hostname(banco_ativos, termo)
+            if resultados:
+                print(f"\n{len(resultados)} registro(s) encontrado(s):")
+                for at in resultados:
+                    print(f"  - [ID {at['id']}] {at['hostname']} | {at['tipo']} | Resp: {at['responsavel']}")
+            else:
+                print(f"Nenhum ativo encontrado contendo o termo '{termo}'.")
+
+        elif opcao == "4":
+            print("\n--- ATUALIZAÇÃO DE ATIVO ---")
+            try:
+                id_ativo = int(input("Informe o ID do ativo a ser atualizado: ").strip())
+            except ValueError:
+                print("Erro: O ID deve ser numérico.")
+                continue
+
+            if id_ativo not in banco_ativos:
+                print(f"Erro: Ativo com ID {id_ativo} não encontrado.")
+                continue
+
+            print("Pressione Enter sem digitar nada caso queira manter o valor atual.")
+            novo_host = input(f"Novo Hostname [{banco_ativos[id_ativo]['hostname']}]: ").strip()
+            novo_resp = input(f"Novo Responsável [{banco_ativos[id_ativo]['responsavel']}]: ").strip()
+            nova_loc = input(f"Nova Localização [{banco_ativos[id_ativo]['localizacao']}]: ").strip()
+
+            print("\nCategorias disponíveis:")
+            for tipo in TipoAtivo:
+                print(f"  [{tipo.value}] {tipo.name}")
+            tipo_input = input(f"Novo Código de Categoria [{banco_ativos[id_ativo]['tipo_codigo']}]: ").strip()
+
+            novo_tipo = None
+            if tipo_input:
+                try:
+                    novo_tipo = int(tipo_input)
+                except ValueError:
+                    print("Erro: Código de categoria deve ser um número.")
+                    continue
+
+            atualizar_ativo(
+                banco=banco_ativos,
+                id_ativo=id_ativo,
+                novo_hostname=novo_host if novo_host else None,
+                novo_responsavel=novo_resp if novo_resp else None,
+                nova_localizacao=nova_loc if nova_loc else None,
+                novo_tipo_codigo=novo_tipo
+            )
+            print(f"Dados do ativo ID {id_ativo} atualizados.")
+
+        elif opcao == "5":
+            print("\n--- REMOÇÃO DE ATIVO ---")
+            try:
+                id_ativo = int(input("Informe o ID do ativo a remover: ").strip())
+            except ValueError:
+                print("Erro: O ID deve ser numérico.")
+                continue
+
+            if deletar_ativo(banco_ativos, id_ativo):
+                print(f"Ativo ID {id_ativo} e suas vulnerabilidades foram removidos com sucesso.")
+
+        elif opcao == "6":
+            print("\n--- CADASTRO DE VULNERABILIDADE ---")
+            try:
+                id_ativo = int(input("Informe o ID do ativo afetado: ").strip())
+            except ValueError:
+                print("Erro: O ID deve ser numérico.")
+                continue
+
+            if id_ativo not in banco_ativos:
+                print(f"Erro: Ativo ID {id_ativo} não existe.")
+                continue
+
+            descricao = input("Descrição da vulnerabilidade: ")
+            categoria = input("Categoria (ex: Software desatualizado, Configuração insegura): ")
+
+            print("\nSeveridades válidas: " + ", ".join([s.value for s in Severidade]))
+            severidade = input("Severidade: ")
+
+            print("Status válidos: " + ", ".join([st.value for st in StatusTratamento]))
+            status = input("Status do tratamento: ")
+
+            if cadastrar_vulnerabilidade(banco_ativos, id_ativo, descricao, categoria, severidade, status):
+                print("Vulnerabilidade associada com sucesso ao ativo!")
+
+        elif opcao == "7":
+            print("\n--- LISTAGEM DE VULNERABILIDADES ---")
+            try:
+                id_ativo = int(input("Informe o ID do ativo para auditoria: ").strip())
+            except ValueError:
+                print("Erro: O ID deve ser numérico.")
+                continue
+
+            listar_vulnerabilidades_ativo(banco_ativos, id_ativo)
+
+        elif opcao == "8":
+            print("\n--- PERSISTÊNCIA MANUAL ---")
+            if salvar_dados_em_arquivo(banco_ativos):
+                print(f"Base salva com sucesso no arquivo '{NOME_ARQUIVO_BANCO}'.")
+
+        elif opcao == "0":
+            print("\nSalva base antes de finalizar...")
+            salvar_dados_em_arquivo(banco_ativos)
+            print("Sistema encerrado com sucesso.")
+            break
+
+        else:
+            print("Erro: Opção inválida. Por favor, escolha um item entre 0 e 8.")
+
+
+if __name__ == "__main__":
+    menu_principal()
