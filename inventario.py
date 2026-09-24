@@ -421,6 +421,7 @@ def menu_principal():
                 novo_resp = input("Novo Responsável (Enter para manter): ").strip() or None
                 nova_loc = input("Nova Localização (Enter para manter): ").strip() or None
                 
+                print("Tipos: 1-NOTEBOOK | 2-SERVIDOR | 3-ROTEADOR | 4-ESTACAO_TRABALHO | 5-APLICACAO_WEB | 6-BANCO_DE_DADOS")
                 novo_cod = None
                 cod_input = input("Novo Código de Tipo (Enter para manter): ").strip()
                 if cod_input:
